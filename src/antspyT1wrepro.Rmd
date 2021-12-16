@@ -47,16 +47,16 @@ confidence to different measurements that we have.
 then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
 
 ```{r importantParameters}
-excludeSigna = TRUE # eliminate the really bad scanner
+excludeSigna = FALSE # eliminate the really bad scanner
 onlyDayOne = TRUE # eliminate the multi-day data collected only at one site
 # demonstrate flexibility to analysis region
-tarAnat='fusiform'
-anatcsv='dktcortex.csv'
-tarAnat='NBM'
-tarAnat='CH13'
-anatcsv='bf.csv'
 anatcsv='tissues.csv'
 tarAnat='WM'
+tarAnat='fusiform'
+anatcsv='dktcortex.csv'
+tarAnat='CH13'
+tarAnat='NBM'
+anatcsv='bf.csv'
 ```
 
 
@@ -214,13 +214,13 @@ visreg::visreg( mdl, 'efc', gg=TRUE )+ ggtitle(paste("Subject + scanner + efc R^
 
 ## show volumes for one subject at different sites
 
-```{r onesub3bars,fig.width=17,fig.height=6}
+```{r onesub3bars,fig.width=17,fig.height=6,echo=FALSE}
 ggthemr("flat")
 nvols = length( roi$Description[roisel] )
 dfvols = data.frame( matrix( nrow=3, ncol=nvols+1) )
 colnames(dfvols)=c("ID",roi$Description[roisel])
 ct=0
-for ( j in  c(86,88,93)) {
+for ( j in  which( dd$Subject == "MP004" ) ) {
   myid = dd[j,"participants_id"]
   fn = paste0( rdir, "/SRPBTravel/", myid,
     "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-", anatcsv )
