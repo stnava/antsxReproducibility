@@ -48,12 +48,15 @@ then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
 
 ```{r importantParameters}
 excludeSigna = TRUE # eliminate the really bad scanner
+onlyDayOne = TRUE # eliminate the multi-day data collected only at one site
 # demonstrate flexibility to analysis region
 tarAnat='fusiform'
 anatcsv='dktcortex.csv'
 tarAnat='NBM'
 tarAnat='CH13'
 anatcsv='bf.csv'
+anatcsv='tissues.csv'
+tarAnat='WM'
 ```
 
 
@@ -79,6 +82,7 @@ for ( j in 1:nrow(dd)) {
     }
   }
 dd=dd[!is.na(dd$outcome),]
+if ( onlyDayOne ) dd = dd[  dd$Day == 1, ]
 if ( excludeSigna ) dd=dd[dd$Scanner != "Signa",] # eliminate the really bad scanner
 ```
 
@@ -126,70 +130,67 @@ ggplot(dd, aes(x = Subject, y = outcome, color = Scanner)) +
 
 ## Demonstrate effects of controlling for different variables with regression
 
-What is the variability of the measurement if we control for age alone?
+
+
+What is the fit of the model if we predict with subject alone?
 ```{r statsage,fig.width=10,fig.height=4}
-mdl=(lm( outcome ~  age + Subject , data=dd ))
-visreg::visreg( mdl, "Subject", gg=TRUE )
+mdl=(lm( outcome ~  1 + Subject , data=dd ))
+rsq2 = format(summary( mdl )$r.squared,digits=3)
+visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject only R^2:",rsq2))
 ```
 
-What is the reproducibility of the measurement if we control for age and scanner?
+What is the variability of the measurement if we add manufacturer?
+```{r statsageb,fig.width=10,fig.height=4}
+mdl=(lm( outcome ~  Manufacture + Subject , data=dd ))
+rsq2 = format(summary( mdl )$r.squared,digits=3)
+visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + Mfg R^2:",rsq2))
+```
+
+What is the reproducibility of the measurement if add scanner?
 ```{r stats,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~  age + Subject + Scanner + 1 , data=dd ))
-visreg::visreg( mdl, "Subject", gg=TRUE )
-# grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
+mdl=(lm( outcome ~   Subject + Scanner + 1 , data=dd ))
+rsq2 = format(summary( mdl )$r.squared,digits=3)
+visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + scanner R^2:",rsq2))
 ```
 
-What is the reproducibility of the measurement if we control for site?
+What is the accuracy of the model if we add site?
 ```{r stats2c,fig.width=10,fig.height=4}
-
-mdl=(lm( outcome ~  age + Subject + Site + 1 , data=dd ))
-visreg::visreg( mdl, "Subject", gg=TRUE )
-
-# grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
+mdl=(lm( outcome ~   Subject + Site + 1 , data=dd ))
+rsq2 = format(summary( mdl )$r.squared,digits=3)
+visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + site R^2:",rsq2))
 ```
 
 
 What is the effect of total SNR?
 ```{r stats2b,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~  age + Subject + Scanner + snr_total , data=dd ))
-visreg::visreg( mdl, 'snr_total', gg=TRUE )
+mdl=(lm( outcome ~   Subject + Scanner + snr_total , data=dd ))
+rsq2 = format(summary( mdl )$r.squared,digits=3)
+visreg::visreg( mdl, 'snr_total', gg=TRUE )+ ggtitle(paste("Subject + scanner + snr R^2:",rsq2))
 ```
 
 
 What is the effect of gray matter SNR?
 ```{r stats3,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~  age + Subject + Scanner + snr_gm , data=dd ))
-visreg::visreg( mdl, 'snr_gm', gg=TRUE )
+mdl=(lm( outcome ~   Subject + Scanner + snr_gm , data=dd ))
+rsq2 = format(summary( mdl )$r.squared,digits=3)
+visreg::visreg( mdl, 'snr_gm', gg=TRUE )+ ggtitle(paste("Subject + scanner + gm snr R^2:",rsq2))
+
 ```
 
 
 
-What is the effect of age if we control for the best confounds?
-
+What is the effect of motion confounds?
 
 see the discussion of MRIQC [here](https://cpb-us-w2.wpmucdn.com/sites.brown.edu/dist/0/278/files/2021/10/MRIQC.pdf)
 
-```{r stats3age2,fig.width=10,fig.height=4}
-library(lme4)
-mdl0=(lm( outcome ~  age  +(Subject), data=dd ))
-mycoffs0=coefficients(summary(mdl0))
-mdl1=(lm( outcome ~  age  + Scanner + snr_total+ efc+(Subject), data=dd ))
-summary(mdl1)
-mycoffs1=coefficients(summary(mdl1))
-# mdl=(lm( outcome ~  age   +(Subject), data=dd ))
-ttl=paste0("best t=",
-  format(mycoffs1["age",3],digits=3),
-  " vs t=",format(mycoffs0["age",3],digits=3))
-visreg::visreg( mdl1, 'age', gg=TRUE ) + ggtitle(ttl)
-```
 
 ```{r statsnorun,echo=FALSE,eval=FALSE,fig.width=10,fig.height=4}
 qnms=names(dd)[13:80]
 for ( qnm in qnms ) {
-  mdl=(lm( paste0("outcome ~  age + Subject + Scanner + ", qnm) , data=dd ))
+  mdl=(lm( paste0("outcome ~   Subject + Scanner + ", qnm) , data=dd ))
   mycoffs=coefficients(summary(mdl))
   if ( mycoffs[qnm,4] < 0.01 )  {
     print(mycoffs)
@@ -202,10 +203,13 @@ for ( qnm in qnms ) {
 
 What is the reproducibility of the measurement if we control for a motion specific variable?
 
-```{r stats2,fig.width=10,fig.height=14}
+```{r stats2,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~  age + Subject + Scanner + efc , data=dd ))
-grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
+mdl=(lm( outcome ~   Subject + Scanner + efc , data=dd ))
+rsq2 = format(summary( mdl )$r.squared,digits=3)
+visreg::visreg( mdl, 'efc', gg=TRUE )+ ggtitle(paste("Subject + scanner + efc R^2:",rsq2))
+
+# grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
 ```
 
 ## show volumes for one subject at different sites
