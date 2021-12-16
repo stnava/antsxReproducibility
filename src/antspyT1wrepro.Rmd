@@ -1,0 +1,287 @@
+---
+title: "SRPB traveling subjects reproducibility analysis"
+author: "Brian B. Avants"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_document
+---
+
+```{r global options, include=FALSE}
+library(knitr)
+library(ANTsR)
+library( ggplot2 )
+require(grid)
+require(gridExtra)
+library( tidyr )
+library("ggthemes")
+library( ggthemr )
+library(SimplyAgree)
+theme_set(
+    theme_classic(base_size = 25)
+)
+ggthemr("flat",text_size=20,spacing=1.3)
+update_geom_defaults("point", list(size = 4))
+
+```
+
+> "if not now, when?"
+
+
+## reproducibility analysis for antspyt1w results
+
+this documents different approaches to looking at reproducibility in numeric
+summary data derived from T1w images by ANTsX methods.
+
+the `csv` results are generated from antspyt1w version 0.3.3.
+
+* report overall reproducibility for a given region
+
+* report a summary of cross-site agreement for a given region
+
+* potentially look at effect sizes (though the variables are limited for this)
+
+* we should distill the best of these measurements to a single funtion and
+then run on all of our derived variables --- thereby assigning specific
+confidence to different measurements that we have.
+
+* the `tarAnat` and `anatcsv` values should match.  the analysis is
+then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
+
+```{r importantParameters}
+excludeSigna = TRUE # eliminate the really bad scanner
+# demonstrate flexibility to analysis region
+tarAnat='fusiform'
+anatcsv='dktcortex.csv'
+tarAnat='NBM'
+tarAnat='CH13'
+anatcsv='bf.csv'
+```
+
+
+```{r,echo=FALSE}
+library(ANTsR)
+rdir=path.expand("~/code/antsxReproducibility")
+dd=read.csv(paste0( rdir, "/SRPBTravel/participants.csv"))
+qct1 = read.table( paste0( rdir, "/QC/group_T1w.tsv"),header=TRUE)
+qct1$participants_id=gsub("_T1w","",qct1$bids_name)
+qct1$participants_id=gsub("_run-01","",qct1$participants_id)
+dd = merge(dd,qct1,by='participants_id')
+usubs = unique( dd$Subject )
+usite = unique( dd$Site )
+uscan = unique( dd$Scanner )
+for ( j in 1:nrow(dd)) {
+  myid = dd[j,"participants_id"]
+  fn = paste0( rdir, "/SRPBTravel/", myid,
+    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",anatcsv)
+  if( file.exists( fn ) ) {
+    roi = read.csv( fn )
+    roisel = grep(tarAnat,roi$Description)
+    dd[j,"outcome"] = sum(roi$VolumeInMillimeters[roisel])
+    }
+  }
+dd=dd[!is.na(dd$outcome),]
+if ( excludeSigna ) dd=dd[dd$Scanner != "Signa",] # eliminate the really bad scanner
+```
+
+## Demonstrate effect of subject vs effect of Scanner or Site: Raw data plots
+
+```{r plotbysubject,fig.width=12,fig.height=12,eval=FALSE,echo=FALSE,message=FALSE}
+library(GGally)
+mycols = c('age', 'outcome', 'Site', 'Day','Phase','Manufacture','Coil','Scanner')
+mycols = c('age', 'outcome', 'Site', 'Scanner')
+nna = ! is.na( dd$outcome )
+print(
+  ggpairs(data = dd[nna, c('Subject',mycols)] ) )
+#    mapping = ggplot2::aes_string(color = 'Subject'),
+#        columns = mycols,
+#        upper = list(continuous = "cor",
+#                     combo = "box_no_facet",
+#                     discrete = "facetbar",
+#                     na = "na"),
+#        lower = list(continuous = "points",
+#                     combo = "facethist",
+#                     discrete = "facetbar",
+#                     na = "na"),
+#        diag = list(continuous = "densityDiag",
+#                    discrete = "barDiag",
+#                    na = "naDiag"),
+#        xlab = 'X',
+#        ylab = 'Y',
+#    title = 'Exploratory correlations:')
+
+
+```
+
+```{r gg2,fig.width=16,fig.height=5,echo=FALSE}
+ggthemr("fresh",text_size=20,spacing=1.3)
+  ggplot(dd, aes(x = Subject, y = outcome, color = Site)) +
+  geom_jitter(width=0.2,height=0.2) + ggtitle("Site")
+```
+
+
+```{r gg2site,fig.width=16,fig.height=5,echo=FALSE}
+ggplot(dd, aes(x = Subject, y = outcome, color = Scanner)) +
+  geom_jitter(width=0.2,height=0.2) + ggtitle("Scanner") #+geom_point(size=3)
+```
+
+
+## Demonstrate effects of controlling for different variables with regression
+
+What is the variability of the measurement if we control for age alone?
+```{r statsage,fig.width=10,fig.height=4}
+mdl=(lm( outcome ~  age + Subject , data=dd ))
+visreg::visreg( mdl, "Subject", gg=TRUE )
+```
+
+What is the reproducibility of the measurement if we control for age and scanner?
+```{r stats,fig.width=10,fig.height=4}
+
+mdl=(lm( outcome ~  age + Subject + Scanner + 1 , data=dd ))
+visreg::visreg( mdl, "Subject", gg=TRUE )
+# grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
+```
+
+What is the reproducibility of the measurement if we control for site?
+```{r stats2c,fig.width=10,fig.height=4}
+
+mdl=(lm( outcome ~  age + Subject + Site + 1 , data=dd ))
+visreg::visreg( mdl, "Subject", gg=TRUE )
+
+# grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
+```
+
+
+What is the effect of total SNR?
+```{r stats2b,fig.width=10,fig.height=4}
+
+mdl=(lm( outcome ~  age + Subject + Scanner + snr_total , data=dd ))
+visreg::visreg( mdl, 'snr_total', gg=TRUE )
+```
+
+
+What is the effect of gray matter SNR?
+```{r stats3,fig.width=10,fig.height=4}
+
+mdl=(lm( outcome ~  age + Subject + Scanner + snr_gm , data=dd ))
+visreg::visreg( mdl, 'snr_gm', gg=TRUE )
+```
+
+
+
+What is the effect of age if we control for the best confounds?
+
+
+see the discussion of MRIQC [here](https://cpb-us-w2.wpmucdn.com/sites.brown.edu/dist/0/278/files/2021/10/MRIQC.pdf)
+
+```{r stats3age2,fig.width=10,fig.height=4}
+library(lme4)
+mdl0=(lm( outcome ~  age  +(Subject), data=dd ))
+mycoffs0=coefficients(summary(mdl0))
+mdl1=(lm( outcome ~  age  + Scanner + snr_total+ efc+(Subject), data=dd ))
+summary(mdl1)
+mycoffs1=coefficients(summary(mdl1))
+# mdl=(lm( outcome ~  age   +(Subject), data=dd ))
+ttl=paste0("best t=",
+  format(mycoffs1["age",3],digits=3),
+  " vs t=",format(mycoffs0["age",3],digits=3))
+visreg::visreg( mdl1, 'age', gg=TRUE ) + ggtitle(ttl)
+```
+
+```{r statsnorun,echo=FALSE,eval=FALSE,fig.width=10,fig.height=4}
+qnms=names(dd)[13:80]
+for ( qnm in qnms ) {
+  mdl=(lm( paste0("outcome ~  age + Subject + Scanner + ", qnm) , data=dd ))
+  mycoffs=coefficients(summary(mdl))
+  if ( mycoffs[qnm,4] < 0.01 )  {
+    print(mycoffs)
+    print(visreg::visreg( mdl, qnm, gg=TRUE ))
+    Sys.sleep( 1 )
+  }
+}
+```
+
+
+What is the reproducibility of the measurement if we control for a motion specific variable?
+
+```{r stats2,fig.width=10,fig.height=14}
+
+mdl=(lm( outcome ~  age + Subject + Scanner + efc , data=dd ))
+grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
+```
+
+## show volumes for one subject at different sites
+
+```{r onesub3bars,fig.width=17,fig.height=6}
+ggthemr("flat")
+nvols = length( roi$Description[roisel] )
+dfvols = data.frame( matrix( nrow=3, ncol=nvols+1) )
+colnames(dfvols)=c("ID",roi$Description[roisel])
+ct=0
+for ( j in  c(86,88,93)) {
+  myid = dd[j,"participants_id"]
+  fn = paste0( rdir, "/SRPBTravel/", myid,
+    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-", anatcsv )
+  if( file.exists( fn ) ) {
+    roi = read.csv( fn )
+    ct=ct+1
+    roisel = grep(tarAnat,roi$Description)
+    dfvols[ct,] = c(  dd[j,"Scanner"],roi$VolumeInMillimeters[roisel])
+    }
+  }
+dflong = pivot_longer( dfvols, names(dfvols)[-1] )
+dflong$ID=factor(dflong$ID)
+names(dflong)=c("ID","Anat","Volume")
+dflong$Volume = as.numeric( dflong$Volume )
+ylims = c( median(dflong$Volume ), max(dflong$Volume)+0.05*max(dflong$Volume))
+ggplot(dflong, aes(fill=ID, y=Volume, x=Anat)) +
+    geom_bar(position="dodge", stat="identity")+
+      theme(text = element_text(size=22),
+        axis.text.x = element_text(angle=0, hjust=1))
+```
+
+
+## Summmary  reliability data: statistical measures of reproducibility
+
+```{r}
+print( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
+```
+
+##  Site-wise reliability
+
+```{r,fig.width=12,fig.height=12,echo=FALSE}
+library(irr)
+myvar='Site'
+# myvar='Scanner'
+uscans=unique(dd[,myvar])
+nVars=length(uscans)
+iccdf = matrix(0,nrow=nVars,ncol=nVars)
+uscansNam=uscans
+for ( j in 1:nVars ) {
+  ddscanj = dd[dd[,myvar]==uscans[j] & dd$Day==1,]
+  uscansNam[j]=paste0(uscansNam[j],unique(ddscanj$Scanner))
+}
+rownames(iccdf)=uscansNam
+colnames(iccdf)=uscansNam
+for ( k in 1:nVars) {
+  for (j in 1:nVars) {
+  if ( TRUE) {
+    subsloc =  intersect(
+      dd[dd[,myvar]==uscans[k],"Subject"],
+      dd[dd[,myvar]==uscans[j],"Subject"] )
+    ddscanj = dd[dd[,myvar]==uscans[j] & dd$Day==1,]
+    ddscank = dd[dd[,myvar]==uscans[k] & dd$Day==1,]
+    sdf=data.frame(
+      V0=ddscank[ ddscank[,"Subject"] %in% subsloc,"outcome"],
+      V1=ddscanj[ ddscanj[,"Subject"] %in% subsloc,"outcome"] )
+    iccSR = irr::icc( sdf[,c("V0","V1")],
+      model = "oneway", type = "agreement", unit = "single" )$value # ,1,5)
+    iccdf[k,j]=iccSR
+    }
+  }}#
+# pheatmap::pheatmap(iccdf,display_numbers=T)
+library(corrplot)
+corrplot.mixed(iccdf,is.corr=F)
+# corrplot::corrplot(iccdf, method = 'shade', order = 'AOE', diag = FALSE)
+library("gplots")
+heatmap.2(iccdf, scale = "none", col = bluered(100),
+          trace = "none", density.info = "none")
+```
