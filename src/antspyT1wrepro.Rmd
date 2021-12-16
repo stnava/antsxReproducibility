@@ -47,20 +47,36 @@ confidence to different measurements that we have.
 then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
 
 ```{r importantParameters}
-excludeSigna = FALSE # eliminate the really bad scanner
+excludeScanners = c(  ) # eliminate the really bad scanner
+# excludeScanners = c( "Signa", "MR", "Achieva" )
 onlyDayOne = TRUE # eliminate the multi-day data collected only at one site
 # demonstrate flexibility to analysis region
-anatcsv='tissues.csv'
-tarAnat='WM'
-tarAnat='fusiform'
-anatcsv='dktcortex.csv'
 tarAnat='CH13'
 tarAnat='NBM'
 anatcsv='bf.csv'
+# multiple regions
+tarAnat=c( 'fusiform', 'insula' )
+anatcsv='dktcortex.csv'
+anatcsv='tissues.csv'
+tarAnat=c( "DeepGray", "WM", "GM" )
+# mid
+anatcsv='cit168.csv'
+tarAnat=c( 'SNc', 'SNr' )
+tarAnat=c( 'Pu', 'Ca' )
+# mtl
+anatcsv='mtl.csv'
+tarAnat=c( 'EC'  )
 ```
 
 
 ```{r,echo=FALSE}
+multigrep <- function( x, desc ) {
+  roisel = c()
+  for ( xx in x )
+    roisel = c( roisel, grep(xx, desc) )
+  return(  roisel )
+}
+
 library(ANTsR)
 rdir=path.expand("~/code/antsxReproducibility")
 dd=read.csv(paste0( rdir, "/SRPBTravel/participants.csv"))
@@ -77,13 +93,60 @@ for ( j in 1:nrow(dd)) {
     "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",anatcsv)
   if( file.exists( fn ) ) {
     roi = read.csv( fn )
-    roisel = grep(tarAnat,roi$Description)
+    roisel = multigrep(tarAnat,roi$Description)
     dd[j,"outcome"] = sum(roi$VolumeInMillimeters[roisel])
     }
   }
 dd=dd[!is.na(dd$outcome),]
 if ( onlyDayOne ) dd = dd[  dd$Day == 1, ]
-if ( excludeSigna ) dd=dd[dd$Scanner != "Signa",] # eliminate the really bad scanner
+if ( length( excludeScanners ) > 0 )
+  dd=dd[ ! (dd$Scanner %in% excludeScanners ),] # eliminate the really bad scanner
+```
+
+
+## table of scanners involved here
+
+```{r,echo=FALSE}
+pander::pander( table( dd$Scanner ) )
+```
+
+
+## show volumes for one subject at different sites
+
+```{r onesub3bars,fig.width=17,fig.height=6,echo=FALSE}
+ggthemr("flat")
+nvols = length( roi$Description[roisel] )
+dfvols = data.frame( matrix( nrow=3, ncol=nvols+1) )
+colnames(dfvols)=c("ID",roi$Description[roisel])
+ct=0
+for ( j in  which( dd$Subject == "MP004" ) ) {
+  myid = dd[j,"participants_id"]
+  fn = paste0( rdir, "/SRPBTravel/", myid,
+    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-", anatcsv )
+  if( file.exists( fn ) ) {
+    roi = read.csv( fn )
+    ct=ct+1
+    roisel = multigrep(tarAnat,roi$Description)
+    dfvols[ct,] = c(  dd[j,"Scanner"], (roi$VolumeInMillimeters[roisel]) )
+    }
+  }
+dflong = pivot_longer( dfvols, names(dfvols)[-1] )
+dflong$ID=factor(dflong$ID)
+names(dflong)=c("ID","Anat","Volume")
+dflong$Volume = as.numeric( dflong$Volume )
+ylims = c( median(dflong$Volume ), max(dflong$Volume)+0.05*max(dflong$Volume))
+ggplot(dflong, aes(fill=ID, y=Volume, x=Anat)) +
+    geom_bar(position="dodge", stat="identity")+
+      theme(text = element_text(size=22),
+        axis.text.x = element_text(angle=0, hjust=1))
+```
+
+
+## Summmary  reliability data: statistical measures of reproducibility
+
+```{r,fig.width=14,fig.height=4}
+print( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
+plot( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
 ```
 
 ## Demonstrate effect of subject vs effect of Scanner or Site: Raw data plots
@@ -141,9 +204,11 @@ visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject only R^2:",rs
 
 What is the variability of the measurement if we add manufacturer?
 ```{r statsageb,fig.width=10,fig.height=4}
-mdl=(lm( outcome ~  Manufacture + Subject , data=dd ))
-rsq2 = format(summary( mdl )$r.squared,digits=3)
-visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + Mfg R^2:",rsq2))
+if ( length( unique(dd$Manufacture)) > 1 ) {
+  mdl=(lm( outcome ~  Manufacture + Subject , data=dd ))
+  rsq2 = format(summary( mdl )$r.squared,digits=3)
+  visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + Mfg R^2:",rsq2))
+  }
 ```
 
 What is the reproducibility of the measurement if add scanner?
@@ -210,43 +275,6 @@ rsq2 = format(summary( mdl )$r.squared,digits=3)
 visreg::visreg( mdl, 'efc', gg=TRUE )+ ggtitle(paste("Subject + scanner + efc R^2:",rsq2))
 
 # grid.arrange( grobs = visreg::visreg( mdl, gg=TRUE ), ncol=1, main='reproducibility' )
-```
-
-## show volumes for one subject at different sites
-
-```{r onesub3bars,fig.width=17,fig.height=6,echo=FALSE}
-ggthemr("flat")
-nvols = length( roi$Description[roisel] )
-dfvols = data.frame( matrix( nrow=3, ncol=nvols+1) )
-colnames(dfvols)=c("ID",roi$Description[roisel])
-ct=0
-for ( j in  which( dd$Subject == "MP004" ) ) {
-  myid = dd[j,"participants_id"]
-  fn = paste0( rdir, "/SRPBTravel/", myid,
-    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-", anatcsv )
-  if( file.exists( fn ) ) {
-    roi = read.csv( fn )
-    ct=ct+1
-    roisel = grep(tarAnat,roi$Description)
-    dfvols[ct,] = c(  dd[j,"Scanner"],roi$VolumeInMillimeters[roisel])
-    }
-  }
-dflong = pivot_longer( dfvols, names(dfvols)[-1] )
-dflong$ID=factor(dflong$ID)
-names(dflong)=c("ID","Anat","Volume")
-dflong$Volume = as.numeric( dflong$Volume )
-ylims = c( median(dflong$Volume ), max(dflong$Volume)+0.05*max(dflong$Volume))
-ggplot(dflong, aes(fill=ID, y=Volume, x=Anat)) +
-    geom_bar(position="dodge", stat="identity")+
-      theme(text = element_text(size=22),
-        axis.text.x = element_text(angle=0, hjust=1))
-```
-
-
-## Summmary  reliability data: statistical measures of reproducibility
-
-```{r}
-print( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
 ```
 
 ##  Site-wise reliability
