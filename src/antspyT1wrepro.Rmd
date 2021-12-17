@@ -15,6 +15,7 @@ library( tidyr )
 library("ggthemes")
 library( ggthemr )
 library(SimplyAgree)
+library(DescTools)
 theme_set(
     theme_classic(base_size = 25)
 )
@@ -51,21 +52,22 @@ excludeScanners = c(  ) # eliminate the really bad scanner
 # excludeScanners = c( "Signa", "MR", "Achieva" )
 onlyDayOne = TRUE # eliminate the multi-day data collected only at one site
 # demonstrate flexibility to analysis region
-tarAnat='CH13'
-tarAnat='NBM'
-anatcsv='bf.csv'
-# multiple regions
-tarAnat=c( 'fusiform', 'insula' )
-anatcsv='dktcortex.csv'
 anatcsv='tissues.csv'
 tarAnat=c( "DeepGray", "WM", "GM" )
 # mid
 anatcsv='cit168.csv'
 tarAnat=c( 'SNc', 'SNr' )
 tarAnat=c( 'Pu', 'Ca' )
+# multiple regions
+tarAnat=c( 'middle temporal' )
+anatcsv='dktcortex.csv'
 # mtl
 anatcsv='mtl.csv'
-tarAnat=c( 'EC'  )
+tarAnat=c( 'parahippocampal'  )
+# nbm
+tarAnat='CH13'
+tarAnat='NBM'
+anatcsv='bf.csv'
 ```
 
 
@@ -144,9 +146,17 @@ ggplot(dflong, aes(fill=ID, y=Volume, x=Anat)) +
 
 ## Summmary  reliability data: statistical measures of reproducibility
 
-```{r,fig.width=14,fig.height=4}
+```{r,fig.width=14,fig.height=4,echo=FALSE}
+# now site reliability
+mypw = pivot_wider( dd, id_cols='Subject',
+  names_from=c("Site"), values_from="outcome" )
+myiccs = ICC( mypw[,-1] )
+pander::set.caption(paste( "Site ICC2k - average k raters"))
+pander::pander( myiccs$results[5,1:6] )
+
 print( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
 plot( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
+
 ```
 
 ## Demonstrate effect of subject vs effect of Scanner or Site: Raw data plots
