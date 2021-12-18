@@ -16,6 +16,7 @@ library("ggthemes")
 library( ggthemr )
 library(SimplyAgree)
 library(DescTools)
+library( subtyper )
 theme_set(
     theme_classic(base_size = 25)
 )
@@ -49,25 +50,34 @@ then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
 
 ```{r importantParameters}
 excludeScanners = c(  ) # eliminate the really bad scanner
-# excludeScanners = c( "Signa", "MR", "Achieva" )
+# excludeScanners = c( "Signa" ) #, "MR", "Achieva" )
 onlyDayOne = TRUE # eliminate the multi-day data collected only at one site
-# demonstrate flexibility to analysis region
+# mtl
+anatcsv='mtl.csv'
+tarAnat=c( 'parahippocampal'  )
+tarAnat=c( 'parah' )
 anatcsv='tissues.csv'
 tarAnat=c( "DeepGray", "WM", "GM" )
+
+# nbm
+tarAnat='CH13'
+# tarAnat=c('NBM_right_pos', 'NBM_left_pos')
+anatcsv='bf.csv'
+
 # mid
 anatcsv='cit168.csv'
 tarAnat=c( 'SNc', 'SNr' )
 tarAnat=c( 'Pu', 'Ca' )
-# multiple regions
-tarAnat=c( 'middle temporal' )
+
 anatcsv='dktcortex.csv'
-# mtl
 anatcsv='mtl.csv'
-tarAnat=c( 'parahippocampal'  )
-# nbm
-tarAnat='CH13'
-tarAnat='NBM'
-anatcsv='bf.csv'
+
+tarAnat=c( 'perirhinal' )
+
+anatcsv='cit168.csv'
+tarAnat=c( 'SNc')
+post=c('SRHIER','')[2]
+
 ```
 
 
@@ -92,7 +102,8 @@ uscan = unique( dd$Scanner )
 for ( j in 1:nrow(dd)) {
   myid = dd[j,"participants_id"]
   fn = paste0( rdir, "/SRPBTravel/", myid,
-    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",anatcsv)
+    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",post,anatcsv)
+  if ( j==1 ) print(fn)
   if( file.exists( fn ) ) {
     roi = read.csv( fn )
     roisel = multigrep(tarAnat,roi$Description)
@@ -326,4 +337,28 @@ corrplot.mixed(iccdf,is.corr=F)
 library("gplots")
 heatmap.2(iccdf, scale = "none", col = bluered(100),
           trace = "none", density.info = "none")
+```
+
+
+
+```{r ddoutlieranalysis}
+oldf = data.frame()
+for ( j in 1:nrow(dd)) {
+  myid = dd[j,"participants_id"]
+  fn = Sys.glob( paste0( rdir, "/SRPBTravel/", myid,
+    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",post,"rbp.csv") )
+  if( file.exists( fn ) ) {
+    roi = read.csv( fn )[,-1]
+    if ( j == 1 ) oldf = roi else oldf = rbind(oldf,roi)
+    }
+  }
+oldf = subtyper::outlierness( oldf, calck=24 )
+ddOL = cbind(dd,oldf[,grep("OL_",names(oldf))])
+
+olnames = names(oldf)[ grep("OL_",names(oldf)) ]
+for ( nm in olnames ) {
+  print(nm)
+  print(table( ddOL$Scanner, ddOL[,nm] > quantile( ddOL[,nm], 0.66 ) ))
+}
+
 ```
