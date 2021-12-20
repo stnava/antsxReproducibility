@@ -48,6 +48,10 @@ confidence to different measurements that we have.
 * the `tarAnat` and `anatcsv` values should match.  the analysis is
 then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
 
+* the Achieva appears to have the highest quality wrt `cnr` and `snr_total`.
+
+* overall, YC1 is among the best sites.
+
 ```{r importantParameters}
 excludeScanners = c(  ) # eliminate the really bad scanner
 # excludeScanners = c( "Signa" ) #, "MR", "Achieva" )
@@ -114,6 +118,30 @@ dd=dd[!is.na(dd$outcome),]
 if ( onlyDayOne ) dd = dd[  dd$Day == 1, ]
 if ( length( excludeScanners ) > 0 )
   dd=dd[ ! (dd$Scanner %in% excludeScanners ),] # eliminate the really bad scanner
+```
+
+
+```{r ddoutlieranalysis,echo=FALSE,eval=TRUE}
+oldf = data.frame()
+for ( j in 1:nrow(dd)) {
+  myid = dd[j,"participants_id"]
+  fn = Sys.glob( paste0( rdir, "/SRPBTravel/", myid,
+    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",post,"rbp.csv") )
+  if( file.exists( fn ) ) {
+    temp = read.csv( fn )[,-1]
+    if ( j == 1 ) oldf = temp else oldf = rbind(oldf,temp)
+    }
+  }
+oldf = subtyper::outlierness( oldf, calck=24 )
+ddOL = cbind(dd,oldf[,grep("OL_",names(oldf))])
+
+olnames = names(oldf)[ grep("OL_",names(oldf)) ]
+for ( nm in olnames ) {
+  print(nm)
+  print(table( ddOL$Scanner, ddOL[,nm] > quantile( ddOL[,nm], 0.66 ) ))
+}
+
+dd$OL_LOOP=ddOL$OL_LOOP
 ```
 
 
@@ -218,7 +246,7 @@ ggplot(dd, aes(x = Subject, y = outcome, color = Scanner)) +
 
 What is the fit of the model if we predict with subject alone?
 ```{r statsage,fig.width=10,fig.height=4}
-mdl=(lm( outcome ~  1 + Subject , data=dd ))
+mdl=(lm( outcome ~  1 + Subject + 1 , data=dd ))
 rsq2 = format(summary( mdl )$r.squared,digits=3)
 visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject only R^2:",rsq2))
 ```
@@ -226,7 +254,7 @@ visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject only R^2:",rs
 What is the variability of the measurement if we add manufacturer?
 ```{r statsageb,fig.width=10,fig.height=4}
 if ( length( unique(dd$Manufacture)) > 1 ) {
-  mdl=(lm( outcome ~  Manufacture + Subject , data=dd ))
+  mdl=(lm( outcome ~  Manufacture + Subject + OL_LOOP , data=dd ))
   rsq2 = format(summary( mdl )$r.squared,digits=3)
   visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + Mfg R^2:",rsq2))
   }
@@ -235,14 +263,14 @@ if ( length( unique(dd$Manufacture)) > 1 ) {
 What is the reproducibility of the measurement if add scanner?
 ```{r stats,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~   Subject + Scanner + 1 , data=dd ))
+mdl=(lm( outcome ~   Subject + OL_LOOP + Scanner , data=dd ))
 rsq2 = format(summary( mdl )$r.squared,digits=3)
 visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + scanner R^2:",rsq2))
 ```
 
 What is the accuracy of the model if we add site?
 ```{r stats2c,fig.width=10,fig.height=4}
-mdl=(lm( outcome ~   Subject + Site + 1 , data=dd ))
+mdl=(lm( outcome ~   Subject + OL_LOOP + Site, data=dd ))
 rsq2 = format(summary( mdl )$r.squared,digits=3)
 visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + site R^2:",rsq2))
 ```
@@ -251,7 +279,7 @@ visreg::visreg( mdl, "Subject", gg=TRUE ) + ggtitle(paste("Subject + site R^2:",
 What is the effect of total SNR?
 ```{r stats2b,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~   Subject + Scanner + snr_total , data=dd ))
+mdl=(lm( outcome ~   Subject + OL_LOOP + Scanner + snr_total , data=dd ))
 rsq2 = format(summary( mdl )$r.squared,digits=3)
 visreg::visreg( mdl, 'snr_total', gg=TRUE )+ ggtitle(paste("Subject + scanner + snr R^2:",rsq2))
 ```
@@ -260,7 +288,7 @@ visreg::visreg( mdl, 'snr_total', gg=TRUE )+ ggtitle(paste("Subject + scanner + 
 What is the effect of gray matter SNR?
 ```{r stats3,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~   Subject + Scanner + snr_gm , data=dd ))
+mdl=(lm( outcome ~   Subject + OL_LOOP + Scanner + snr_gm , data=dd ))
 rsq2 = format(summary( mdl )$r.squared,digits=3)
 visreg::visreg( mdl, 'snr_gm', gg=TRUE )+ ggtitle(paste("Subject + scanner + gm snr R^2:",rsq2))
 
@@ -291,7 +319,7 @@ What is the reproducibility of the measurement if we control for a motion specif
 
 ```{r stats2,fig.width=10,fig.height=4}
 
-mdl=(lm( outcome ~   Subject + Scanner + efc , data=dd ))
+mdl=(lm( outcome ~   Subject + OL_LOOP + Scanner + efc , data=dd ))
 rsq2 = format(summary( mdl )$r.squared,digits=3)
 visreg::visreg( mdl, 'efc', gg=TRUE )+ ggtitle(paste("Subject + scanner + efc R^2:",rsq2))
 
@@ -341,24 +369,46 @@ heatmap.2(iccdf, scale = "none", col = bluered(100),
 
 
 
-```{r ddoutlieranalysis}
-oldf = data.frame()
-for ( j in 1:nrow(dd)) {
-  myid = dd[j,"participants_id"]
-  fn = Sys.glob( paste0( rdir, "/SRPBTravel/", myid,
-    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",post,"rbp.csv") )
-  if( file.exists( fn ) ) {
-    roi = read.csv( fn )[,-1]
-    if ( j == 1 ) oldf = roi else oldf = rbind(oldf,roi)
-    }
-  }
-oldf = subtyper::outlierness( oldf, calck=24 )
-ddOL = cbind(dd,oldf[,grep("OL_",names(oldf))])
+```{r,echo=FALSE,eval=FALSE}
+achievaPIDs=dd$participants_id[ dd$Scanner == "Achieva" ]
+achievaSubs=dd$Subject[ dd$Scanner == "Achieva" ]
+achievaSites=dd$Site[ dd$Scanner == "Achieva" ]
+usubs = unique( achievaSubs )
+bestSIDsYC1 = dd$Subject[ dd$Site == "YC1" ]
+bestSIDsHUH = dd$Subject[ dd$Site == "HUH" ]
+bestPIDsYC1 = dd$participants_id[ dd$Site == "YC1" ]
+bestPIDsHUH = dd$participants_id[ dd$Site == "HUH" ]
 
-olnames = names(oldf)[ grep("OL_",names(oldf)) ]
-for ( nm in olnames ) {
-  print(nm)
-  print(table( ddOL$Scanner, ddOL[,nm] > quantile( ddOL[,nm], 0.66 ) ))
-}
+# form a data frame with the necessary mappings
+for ( k in 1:nrow( dd ) ) {
+  sid = dd$Subject[ k ]
+  if ( sid %in% bestSIDsYC1 ) {
+    gtid = bestPIDsYC1[  which(bestSIDsYC1 == sid ) ]
+    gtidk = which( dd$participants_id == gtid )
+  } else if ( sid %in% bestSIDsHUH ) {
+    gtid = bestPIDsHUH[  which(bestSIDsHUH == sid ) ]
+    gtidk = which( dd$participants_id == gtid )
+    }
+  # get the images
+#  ./SRPBTravel/sub-042/T1wHierarchical/SRPBTravel-sub-042-T1wHierarchical-SRHIERbrain_n4_dnz.nii.gz
+  exts = c("-SRHIERbrain_n4_dnz.nii.gz","-cit168lab.nii.gz","-bf.nii.gz")
+  gtfn = paste0( rdir, "/SRPBTravel/", dd$participants_id[gtidk], "/T1wHierarchical/SRPBTravel-", dd$participants_id[gtidk], "-T1wHierarchical", exts )
+  gtImage = antsImageRead( gtfn[1] )
+  gtImageCIT = antsImageRead( gtfn[2] )
+  gtImageBF = antsImageRead( gtfn[3] )
+  tarfn = paste0( rdir, "/SRPBTravel/", dd$participants_id[k], "/T1wHierarchical/SRPBTravel-", dd$participants_id[k], "-T1wHierarchical", exts )
+  targetImage = antsImageRead( tarfn[1] )
+  targetImageCIT = antsImageRead( tarfn[2] )
+  targetImageBF = antsImageRead( tarfn[3] )
+  temp=histogramMatchImage( targetImage, gtImage,
+    numberOfHistogramBins = 48, numberOfMatchPoints=12 )
+  rigidreg = antsRegistration( temp, gtImage, 'Rigid' )
+  citmap = antsApplyTransforms( targetImage, gtImageCIT, rigidreg$fwdtransforms, interpolator='genericLabel')
+  bfmap = antsApplyTransforms( targetImage, gtImageBF, rigidreg$fwdtransforms, interpolator='genericLabel')
+  outfn = paste0( "SRPBtrainingData/", dd$participants_id[k], exts )
+  antsImageWrite( targetImage, outfn[1] )
+  antsImageWrite( citmap, outfn[2] )
+  antsImageWrite( targetImage, outfn[3] )
+  }
 
 ```
