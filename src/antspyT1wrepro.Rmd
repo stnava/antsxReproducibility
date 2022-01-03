@@ -6,6 +6,7 @@ output: rmarkdown::html_document
 ---
 
 ```{r global options, include=FALSE}
+
 library(knitr)
 library(ANTsR)
 library( ggplot2 )
@@ -50,7 +51,8 @@ then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
 
 * the Achieva appears to have the highest quality wrt `cnr` and `snr_total`.
 
-* overall, YC1 is among the best sites.
+* overall, YC1 is among the best sites and subject sub-094 may have the
+best quality rating.
 
 ```{r importantParameters}
 excludeScanners = c(  ) # eliminate the really bad scanner
@@ -80,7 +82,13 @@ tarAnat=c( 'perirhinal' )
 
 anatcsv='cit168.csv'
 tarAnat=c( 'SNc')
-post=c('SRHIER','')[2]
+
+
+# nbm
+tarAnat=c('NBM_left')
+anatcsv='newdnbm.csv'
+
+post=c('SRHIER','')[1]
 
 ```
 
@@ -121,7 +129,7 @@ if ( length( excludeScanners ) > 0 )
 ```
 
 
-```{r ddoutlieranalysis,echo=FALSE,eval=TRUE}
+```{r ddoutlieranalysis,echo=FALSE,eval=TRUE,message=FALSE}
 oldf = data.frame()
 for ( j in 1:nrow(dd)) {
   myid = dd[j,"participants_id"]
@@ -137,8 +145,8 @@ ddOL = cbind(dd,oldf[,grep("OL_",names(oldf))])
 
 olnames = names(oldf)[ grep("OL_",names(oldf)) ]
 for ( nm in olnames ) {
-  print(nm)
-  print(table( ddOL$Scanner, ddOL[,nm] > quantile( ddOL[,nm], 0.66 ) ))
+#  print(nm)
+#  print(table( ddOL$Scanner, ddOL[,nm] > quantile( ddOL[,nm], 0.66 ) ))
 }
 
 dd$OL_LOOP=ddOL$OL_LOOP
@@ -163,7 +171,7 @@ ct=0
 for ( j in  which( dd$Subject == "MP004" ) ) {
   myid = dd[j,"participants_id"]
   fn = paste0( rdir, "/SRPBTravel/", myid,
-    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-", anatcsv )
+    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-", post,anatcsv )
   if( file.exists( fn ) ) {
     roi = read.csv( fn )
     ct=ct+1
