@@ -170,8 +170,8 @@ ggthemr("flat")
 nvols = length( tarAnat )
 dfvols = dd[which( dd$Subject == "MP004" ),
   c("Subject","participants_id","Site", "Scanner",tarAnat)]
-dfvols = dfvols[ !is.na(dfvols[,tarAnat]),]
-dflong = pivot_longer( dfvols, tail(names(dfvols),1) )
+dfvols = dfvols[ !is.na(dfvols[,tarAnat[1]]),]
+dflong = pivot_longer( dfvols, tail(names(dfvols),nvols) )
 dflong$Subject=factor(dflong$Subject)
 names(dflong)=c("ID", "image", "Site", "Scanner","Anat","Volume")
 dflong$Volume = as.numeric( dflong$Volume )
@@ -272,7 +272,7 @@ fig <- fig %>% add_annotations(x = relidfvol$mean[subsel],
 
 #
 volsel=relidfvol$mean>quantile(relidfvol$mean,0.5) &
- relidfvol$mean<quantile(relidfvol$mean,0.9)
+ relidfvol$mean<quantile(relidfvol$mean,0.66)
 relisub = relidfvol[ volsel, ]
 fig = plot_ly(relisub, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers', text = ~paste('Vol: ', label))
 subsel = multigrep( c("vol_bn_str_pu","vol_bn_str_ca"), relisub$label)
