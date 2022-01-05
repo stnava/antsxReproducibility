@@ -18,6 +18,8 @@ library( ggthemr )
 library(SimplyAgree)
 library(DescTools)
 library( subtyper )
+library(GGally)
+
 theme_set(
     theme_classic(base_size = 25)
 )
@@ -34,7 +36,7 @@ update_geom_defaults("point", list(size = 4))
 this documents different approaches to looking at reproducibility in numeric
 summary data derived from T1w images by ANTsX methods.
 
-the `csv` results are generated from antspyt1w version 0.3.3.
+the `csv` results are generated from antspyt1w version 0.4.9.
 
 * report overall reproducibility for a given region
 
@@ -42,7 +44,7 @@ the `csv` results are generated from antspyt1w version 0.3.3.
 
 * potentially look at effect sizes (though the variables are limited for this)
 
-* we should distill the best of these measurements to a single funtion and
+* we should distill the best of these measurements to a single function and
 then run on all of our derived variables --- thereby assigning specific
 confidence to different measurements that we have.
 
@@ -55,41 +57,36 @@ then performed on whatever `roi$Description` matches the `tarAnat` `grep`.
 best quality rating.
 
 ```{r importantParameters}
+excludeScanners = c( "Signa", "Spectra" ) # eliminate the really bad scanner
+excludeSite = c( "UTO" ) # eliminate the really bad scanner
+excludeSite = c( "HKH" ) # eliminate the really bad scanner
+excludeScanners = c(  "Signa" ) #, "MR", "Achieva" )
 excludeScanners = c(  ) # eliminate the really bad scanner
-# excludeScanners = c( "Signa" ) #, "MR", "Achieva" )
+excludeSite = c(  ) # eliminate the really bad scanner
 onlyDayOne = TRUE # eliminate the multi-day data collected only at one site
-# mtl
-anatcsv='mtl.csv'
-tarAnat=c( 'parahippocampal'  )
-tarAnat=c( 'parah' )
-anatcsv='tissues.csv'
-tarAnat=c( "DeepGray", "WM", "GM" )
+# tarAnat = c( "vol_nbm_left_antbf", "vol_nbm_left_posbf", "vol_nbm_right_midbf",
+# "vol_nbm_left_midbf", "vol_nbm_right_antbf",  "vol_nbm_right_posbf" )
+# tarAnat = c("area_left_perirhinalmtl" ,  "area_right_perirhinalmtl")
+# tarAnat=c("vol_mtg_sn_snc_leftcit168","vol_mtg_sn_snc_rightcit168")
+# tarAnat=c("vol_mtg_sn_snc_leftdeep_cit168","vol_mtg_sn_snc_rightdeep_cit168")
+# tarAnat=c("vol_mtg_sn_snc_leftsnseg","vol_mtg_sn_snc_rightsnseg")
+# tarAnat=c( "vol_deepgraytissues", "vol_gmtissues", "vol_wmtissues" )
+# tarAnat = c( "thk_left_hippocampushipplr", "thk_right_hippocampushipplr")
+# tarAnat = c( "thk_left_hippocampushipplr", "thk_right_hippocampushipplr")
+# tarAnat = c("vol_left_ca1mtl","vol_right_ca1mtl")
+# tarAnat = "vol_gmtissues"
+if ( ! exists( "tarAnat") ) {
+  tarAnat = 'vol_mtg_sn_snc_leftsnseg'
+}
+if ( ! exists( "anatcsv") ) {
+  anatcsv='_v2SR_mergewide.csv'
+  anatcsv='_v0SR_mergewide.csv'
+  # anatcsv='_v3SR_mergewide.csv'
+  # anatcsv='_v1SR_mergewide.csv'
+  }
 
-# nbm
-tarAnat='CH13'
-# tarAnat=c('NBM_right_pos', 'NBM_left_pos')
-anatcsv='bf.csv'
-
-# mid
-anatcsv='cit168.csv'
-tarAnat=c( 'SNc', 'SNr' )
-tarAnat=c( 'Pu', 'Ca' )
-
-anatcsv='dktcortex.csv'
-anatcsv='mtl.csv'
-
-tarAnat=c( 'perirhinal' )
-
-anatcsv='cit168.csv'
-tarAnat=c( 'SNc')
-
-
-# nbm
-tarAnat=c('NBM_left')
-anatcsv='newdnbm.csv'
-
-post=c('SRHIER','')[1]
-
+post=c('SRHIER','')[2]
+print(tarAnat)
 ```
 
 
@@ -111,35 +108,41 @@ dd = merge(dd,qct1,by='participants_id')
 usubs = unique( dd$Subject )
 usite = unique( dd$Site )
 uscan = unique( dd$Scanner )
+undone=TRUE
 for ( j in 1:nrow(dd)) {
   myid = dd[j,"participants_id"]
   fn = paste0( rdir, "/SRPBTravel/", myid,
     "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",post,anatcsv)
+  fn = paste0( rdir, "/traveling_subjects_repro_study/", myid,
+    "/T1wH/",myid,"_T1wH",post,anatcsv)
   if ( j==1 ) print(fn)
   if( file.exists( fn ) ) {
-    roi = read.csv( fn )
-    roisel = multigrep(tarAnat,roi$Description)
-    dd[j,"outcome"] = sum(roi$VolumeInMillimeters[roisel])
+    roi = read.csv( fn )[,-1]
+    if ( undone ) {
+      bounddf = data.frame( matrix(NA,nrow=nrow(dd),ncol=ncol(roi)))
+      colnames(bounddf)=colnames(roi)
+      dd = cbind( dd, bounddf )
+      undone = FALSE
+    }
+    dd[j,colnames(roi)] = roi
     }
   }
-dd=dd[!is.na(dd$outcome),]
-if ( onlyDayOne ) dd = dd[  dd$Day == 1, ]
+if ( length( tarAnat ) > 1 ) {
+  dd$outcome = rowSums( dd[,tarAnat] )
+} else   dd$outcome = ( dd[,tarAnat] )
+if ( onlyDayOne ) dd = dd[ dd$Day == 1, ]
 if ( length( excludeScanners ) > 0 )
   dd=dd[ ! (dd$Scanner %in% excludeScanners ),] # eliminate the really bad scanner
+if ( length( excludeSite ) > 0 )
+  dd=dd[ ! (dd$Site %in% excludeSite ),] # eliminate the really bad scanner
+dd = dd[ !is.na( dd$RandBasisProj01 ),  ]
+
 ```
 
 
 ```{r ddoutlieranalysis,echo=FALSE,eval=TRUE,message=FALSE}
-oldf = data.frame()
-for ( j in 1:nrow(dd)) {
-  myid = dd[j,"participants_id"]
-  fn = Sys.glob( paste0( rdir, "/SRPBTravel/", myid,
-    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-",post,"rbp.csv") )
-  if( file.exists( fn ) ) {
-    temp = read.csv( fn )[,-1]
-    if ( j == 1 ) oldf = temp else oldf = rbind(oldf,temp)
-    }
-  }
+olcols = grep( "RandBasisProj[0-9]", colnames(dd))
+oldf = dd[, olcols ]
 oldf = subtyper::outlierness( oldf, calck=24 )
 ddOL = cbind(dd,oldf[,grep("OL_",names(oldf))])
 
@@ -147,7 +150,7 @@ olnames = names(oldf)[ grep("OL_",names(oldf)) ]
 for ( nm in olnames ) {
 #  print(nm)
 #  print(table( ddOL$Scanner, ddOL[,nm] > quantile( ddOL[,nm], 0.66 ) ))
-}
+  }
 
 dd$OL_LOOP=ddOL$OL_LOOP
 ```
@@ -164,27 +167,16 @@ pander::pander( table( dd$Scanner ) )
 
 ```{r onesub3bars,fig.width=17,fig.height=6,echo=FALSE}
 ggthemr("flat")
-nvols = length( roi$Description[roisel] )
-dfvols = data.frame( matrix( nrow=3, ncol=nvols+1) )
-colnames(dfvols)=c("ID",roi$Description[roisel])
-ct=0
-for ( j in  which( dd$Subject == "MP004" ) ) {
-  myid = dd[j,"participants_id"]
-  fn = paste0( rdir, "/SRPBTravel/", myid,
-    "/T1wHierarchical/SRPBTravel-",myid,"-T1wHierarchical-", post,anatcsv )
-  if( file.exists( fn ) ) {
-    roi = read.csv( fn )
-    ct=ct+1
-    roisel = multigrep(tarAnat,roi$Description)
-    dfvols[ct,] = c(  dd[j,"Scanner"], (roi$VolumeInMillimeters[roisel]) )
-    }
-  }
-dflong = pivot_longer( dfvols, names(dfvols)[-1] )
-dflong$ID=factor(dflong$ID)
-names(dflong)=c("ID","Anat","Volume")
+nvols = length( tarAnat )
+dfvols = dd[which( dd$Subject == "MP004" ),
+  c("Subject","participants_id","Site", "Scanner",tarAnat)]
+dfvols = dfvols[ !is.na(dfvols[,tarAnat]),]
+dflong = pivot_longer( dfvols, tail(names(dfvols),1) )
+dflong$Subject=factor(dflong$Subject)
+names(dflong)=c("ID", "image", "Site", "Scanner","Anat","Volume")
 dflong$Volume = as.numeric( dflong$Volume )
 ylims = c( median(dflong$Volume ), max(dflong$Volume)+0.05*max(dflong$Volume))
-ggplot(dflong, aes(fill=ID, y=Volume, x=Anat)) +
+ggplot(dflong, aes(fill=Scanner, y=Volume, x=Anat)) +
     geom_bar(position="dodge", stat="identity")+
       theme(text = element_text(size=22),
         axis.text.x = element_text(angle=0, hjust=1))
@@ -196,7 +188,7 @@ ggplot(dflong, aes(fill=ID, y=Volume, x=Anat)) +
 ```{r,fig.width=14,fig.height=4,echo=FALSE}
 # now site reliability
 mypw = pivot_wider( dd, id_cols='Subject',
-  names_from=c("Site"), values_from="outcome" )
+  names_from=c("Site"), values_from='outcome' )
 myiccs = ICC( mypw[,-1] )
 pander::set.caption(paste( "Site ICC2k - average k raters"))
 pander::pander( myiccs$results[5,1:6] )
@@ -206,10 +198,108 @@ plot( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
 
 ```
 
+
+
+## Summmary reliability data: all measurements
+
+```{r allrel,fig.width=14,fig.height=4,echo=FALSE,eval=TRUE,message=FALSE,warning=FALSE}
+# now site reliability
+varstostudy = names( roi )[ -c(1:4) ]
+varstostudy = varstostudy[ -grep("RandBasisProjPos",varstostudy)]
+relidf = data.frame( label=varstostudy )
+relidf['mean']=NA
+relidf['icc']=NA
+relidf['cv']=NA
+ct=1
+for ( myvar in varstostudy ) {
+  mypw = pivot_wider( dd, id_cols='Subject',
+    names_from=c("Site"), values_from=tidyselect::all_of(myvar) )
+  myiccs = ICC( mypw[,-1] )
+  # pander::set.caption(paste( "Site ICC2k - average k raters"))
+
+  temp = reli_stats( myvar, "Scanner", "Subject", data=dd )
+  relidf[ct,c("mean","icc","cv")] = c(
+    mean(dd[,myvar],na.rm=TRUE),
+    myiccs$results[5,2],
+    temp$cv )
+  ct=ct+1
+  }
+
+# library(RColorBrewer)
+# n = length( varstostudy )
+# qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+# col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+# pie(rep(1,n), col=sample(col_vector, n,replace=TRUE))
+
+# library(ggsci)
+# ugly <- define_palette(
+#      swatch = ,
+#      # c('black', 'red', 'green', 'blue', 'brown', 'purple', 'yellow'),
+#      gradient = c(lower = 'red', upper = 'pink')
+#    )
+# ggthemr(ugly)
+# ggplot(relidf, aes(fill=label, y=icc, x=label)) +
+#    geom_bar(position="dodge", stat="identity")+
+#      theme(text = element_text(size=22),
+#        axis.text.x = element_text(angle=0, hjust=1))
+library(plotly)
+# fig <- plot_ly(relidf, type='bar', x = ~label, y = ~icc, text = ~label, name="",
+#               hovertemplate = paste('%{x}', '<br>icc: %{text:.2s}<br>'),
+#               texttemplate = '%{y:.2s}', textposition = 'outside')
+# fig <- fig %>% layout(uniformtext=list(minsize=8, mode='hide'))
+# fig
+
+relidfvol = relidf[ grep("vol_",varstostudy),]
+relidfarea = relidf[ grep("area_",varstostudy),]
+relidfthk = relidf[ grep("thk_",varstostudy),]
+
+
+plot_ly(relidfvol, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',
+        text = ~paste('Vol: ', label))
+
+fig = plot_ly(relidfvol[ relidfvol$mean<quantile(relidfvol$mean,0.2), ], x = ~mean, y = ~icc, type = 'scatter', mode = 'markers', text = ~paste('Vol: ', label))
+subsel = multigrep( c("bf","snr","snc"), relidfvol$label)
+fig <- fig %>% add_annotations(x = relidfvol$mean[subsel],
+                          y = relidfvol$icc[subsel],
+                          text = relidfvol$label[subsel],
+                          xref = "x",
+                          yref = "y",
+                          showarrow = TRUE,
+                          arrowhead = 4,
+                          arrowsize = .5,
+                          ax = 20,
+                          ay = -40)
+
+#
+volsel=relidfvol$mean>quantile(relidfvol$mean,0.5) &
+ relidfvol$mean<quantile(relidfvol$mean,0.9)
+relisub = relidfvol[ volsel, ]
+fig = plot_ly(relisub, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers', text = ~paste('Vol: ', label))
+subsel = multigrep( c("vol_bn_str_pu","vol_bn_str_ca"), relisub$label)
+fig %>% add_annotations(x = relisub$mean[subsel],
+                          y = relisub$icc[subsel],
+                          text = relisub$label[subsel],
+                          xref = "x",
+                          yref = "y",
+                          showarrow = TRUE,
+                          arrowhead = 4,
+                          arrowsize = .5,
+                          ax = 20,
+                          ay = -40)
+
+plot_ly(relidfthk, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',
+        text = ~paste('Thk: ', label))
+
+#
+plot_ly(relidfarea, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',
+        text = ~paste('Area: ', label))
+plot_ly(relidfarea[ relidfarea$mean<quantile(relidfarea$mean,0.2), ], x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',  text = ~paste('Area: ', label))
+
+```
+
 ## Demonstrate effect of subject vs effect of Scanner or Site: Raw data plots
 
 ```{r plotbysubject,fig.width=12,fig.height=12,eval=FALSE,echo=FALSE,message=FALSE}
-library(GGally)
 mycols = c('age', 'outcome', 'Site', 'Day','Phase','Manufacture','Coil','Scanner')
 mycols = c('age', 'outcome', 'Site', 'Scanner')
 nna = ! is.na( dd$outcome )
@@ -341,6 +431,8 @@ library(irr)
 myvar='Site'
 # myvar='Scanner'
 uscans=unique(dd[,myvar])
+mytable = table( dd[,myvar] )
+uscans = names(mytable[mytable > 2 ])
 nVars=length(uscans)
 iccdf = matrix(0,nrow=nVars,ncol=nVars)
 uscansNam=uscans
@@ -368,10 +460,10 @@ for ( k in 1:nVars) {
   }}#
 # pheatmap::pheatmap(iccdf,display_numbers=T)
 library(corrplot)
-corrplot.mixed(iccdf,is.corr=F)
+corrplot.mixed( ( iccdf ),is.corr=F)
 # corrplot::corrplot(iccdf, method = 'shade', order = 'AOE', diag = FALSE)
 library("gplots")
-heatmap.2(iccdf, scale = "none", col = bluered(100),
+heatmap.2( ( iccdf ), scale = "none", col = bluered(100),
           trace = "none", density.info = "none")
 ```
 
