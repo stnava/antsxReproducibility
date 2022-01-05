@@ -163,49 +163,13 @@ pander::pander( table( dd$Scanner ) )
 ```
 
 
-## show volumes for one subject at different sites
-
-```{r onesub3bars,fig.width=17,fig.height=6,echo=FALSE}
-ggthemr("flat")
-nvols = length( tarAnat )
-dfvols = dd[which( dd$Subject == "MP004" ),
-  c("Subject","participants_id","Site", "Scanner",tarAnat)]
-dfvols = dfvols[ !is.na(dfvols[,tarAnat[1]]),]
-dflong = pivot_longer( dfvols, tail(names(dfvols),nvols) )
-dflong$Subject=factor(dflong$Subject)
-names(dflong)=c("ID", "image", "Site", "Scanner","Anat","Volume")
-dflong$Volume = as.numeric( dflong$Volume )
-ylims = c( median(dflong$Volume ), max(dflong$Volume)+0.05*max(dflong$Volume))
-ggplot(dflong, aes(fill=Scanner, y=Volume, x=Anat)) +
-    geom_bar(position="dodge", stat="identity")+
-      theme(text = element_text(size=22),
-        axis.text.x = element_text(angle=0, hjust=1))
-```
-
-
-## Summmary  reliability data: statistical measures of reproducibility
-
-```{r,fig.width=14,fig.height=4,echo=FALSE}
-# now site reliability
-mypw = pivot_wider( dd, id_cols='Subject',
-  names_from=c("Site"), values_from='outcome' )
-myiccs = ICC( mypw[,-1] )
-pander::set.caption(paste( "Site ICC2k - average k raters"))
-pander::pander( myiccs$results[5,1:6] )
-
-print( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
-plot( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
-
-```
-
-
 
 ## Summmary reliability data: all measurements
 
 ```{r allrel,fig.width=14,fig.height=4,echo=FALSE,eval=TRUE,message=FALSE,warning=FALSE}
 # now site reliability
 varstostudy = names( roi )[ -c(1:4) ]
-varstostudy = varstostudy[ -grep("RandBasisProjPos",varstostudy)]
+varstostudy = varstostudy[ -grep("RandBasisProj",varstostudy)]
 relidf = data.frame( label=varstostudy )
 relidf['mean']=NA
 relidf['icc']=NA
@@ -243,15 +207,26 @@ for ( myvar in varstostudy ) {
 #      theme(text = element_text(size=22),
 #        axis.text.x = element_text(angle=0, hjust=1))
 library(plotly)
-# fig <- plot_ly(relidf, type='bar', x = ~label, y = ~icc, text = ~label, name="",
-#               hovertemplate = paste('%{x}', '<br>icc: %{text:.2s}<br>'),
-#               texttemplate = '%{y:.2s}', textposition = 'outside')
-# fig <- fig %>% layout(uniformtext=list(minsize=8, mode='hide'))
-# fig
+relidf = relidf[ order( relidf$mean),  ]
+relidfvol = relidf[ grep("vol_",relidf$label),]
+relidfvol = relidfvol[ order( relidfvol$cv),  ]
+relidfvol$label = factor( relidfvol$label, levels=relidfvol$label)
+relidfarea = relidf[ grep("area_",relidf$label),]
+relidfarea = relidfarea[ order( relidfarea$cv),  ]
+relidfarea$label = factor( relidfarea$label, levels=relidfarea$label)
+relidfthk = relidf[ grep("thk_",relidf$label),]
+relidfthk = relidfthk[ order( relidfthk$cv),  ]
+relidfthk$label = factor( relidfthk$label, levels=relidfthk$label)
 
-relidfvol = relidf[ grep("vol_",varstostudy),]
-relidfarea = relidf[ grep("area_",varstostudy),]
-relidfthk = relidf[ grep("thk_",varstostudy),]
+plot_ly(relidfvol, type='bar', x = ~label, y = ~cv, text = ~label, name="",
+               texttemplate = '%{y:.2s}', textposition = 'outside') %>% layout(uniformtext=list(minsize=8, mode='hide'))
+#
+plot_ly(relidfarea, type='bar', x = ~label, y = ~cv, text = ~label, name="",
+               texttemplate = '%{y:.2s}', textposition = 'outside') %>% layout(uniformtext=list(minsize=8, mode='hide'))
+
+#
+plot_ly(relidfthk, type='bar', x = ~label, y = ~cv, text = ~label, name="",
+               texttemplate = '%{y:.2s}', textposition = 'outside') %>% layout(uniformtext=list(minsize=8, mode='hide'))
 
 
 plot_ly(relidfvol, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',
@@ -296,6 +271,51 @@ plot_ly(relidfarea, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',
 plot_ly(relidfarea[ relidfarea$mean<quantile(relidfarea$mean,0.2), ], x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',  text = ~paste('Area: ', label))
 
 ```
+
+
+## show volumes for one subject at different sites
+
+```{r onesub3bars,fig.width=17,fig.height=6,echo=FALSE}
+ggthemr("flat")
+ggthemr('pale', layout = 'scientific', spacing = 2, type = 'inner')
+nvols = length( tarAnat )
+dfvols = dd[which( dd$Subject == "MP004" ),
+  c("Subject","participants_id","Site", "Scanner",tarAnat)]
+dfvols = dfvols[ !is.na(dfvols[,tarAnat[1]]),]
+dflong = pivot_longer( dfvols, tail(names(dfvols),nvols) )
+dflong$Subject=factor(dflong$Subject)
+names(dflong)=c("ID", "image", "Site", "Scanner","Anat","Volume")
+dflong$Volume = as.numeric( dflong$Volume )
+ylims = c( median(dflong$Volume ), max(dflong$Volume)+0.05*max(dflong$Volume))
+ggplot(dflong, aes(fill=Scanner, y=Volume, x=Anat)) +
+    geom_bar(position="dodge", stat="identity")+
+      theme(text = element_text(size=22),
+        axis.text.x = element_text(angle=0, hjust=1))
+#
+#ggplot(dflong, aes(fill=Site, y=Volume, x=Anat)) +
+#    geom_bar(position="dodge", stat="identity")+
+#      theme(text = element_text(size=22),
+#        axis.text.x = element_text(angle=0, hjust=1))
+
+```
+
+
+## Summmary  reliability data: statistical measures of reproducibility
+
+```{r,fig.width=14,fig.height=4,echo=FALSE}
+# now site reliability
+mypw = pivot_wider( dd, id_cols='Subject',
+  names_from=c("Site"), values_from='outcome' )
+myiccs = ICC( mypw[,-1] )
+pander::set.caption(paste( "Site ICC2k - average k raters"))
+pander::pander( myiccs$results[5,1:6] )
+
+print( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
+plot( reli_stats( "outcome", "Scanner", "Subject", data=dd ) )
+
+```
+
+
 
 ## Demonstrate effect of subject vs effect of Scanner or Site: Raw data plots
 
