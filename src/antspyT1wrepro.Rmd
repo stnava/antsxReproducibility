@@ -59,10 +59,9 @@ best quality rating.
 ```{r importantParameters}
 excludeScanners = c( "Signa", "Spectra" ) # eliminate the really bad scanner
 excludeSite = c( "UTO" ) # eliminate the really bad scanner
-excludeSite = c( "HKH" ) # eliminate the really bad scanner
 excludeScanners = c(  "Signa" ) #, "MR", "Achieva" )
 excludeScanners = c(  ) # eliminate the really bad scanner
-excludeSite = c(  ) # eliminate the really bad scanner
+excludeSite = c( "HUH" ) # eliminate the really bad scanner
 onlyDayOne = TRUE # eliminate the multi-day data collected only at one site
 # tarAnat = c( "vol_nbm_left_antbf", "vol_nbm_left_posbf", "vol_nbm_right_midbf",
 # "vol_nbm_left_midbf", "vol_nbm_right_antbf",  "vol_nbm_right_posbf" )
@@ -164,7 +163,7 @@ pander::pander( table( dd$Scanner ) )
 
 
 
-## Summmary reliability data: all measurements
+## Summary reliability data: all measurements
 
 ```{r allrel,fig.width=14,fig.height=4,echo=FALSE,eval=TRUE,message=FALSE,warning=FALSE}
 # now site reliability
@@ -233,8 +232,8 @@ plot_ly(relidfvol, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',
         text = ~paste('Vol: ', label))
 
 fig = plot_ly(relidfvol[ relidfvol$mean<quantile(relidfvol$mean,0.2), ], x = ~mean, y = ~icc, type = 'scatter', mode = 'markers', text = ~paste('Vol: ', label))
-subsel = multigrep( c("bf","snr","snc"), relidfvol$label)
-fig <- fig %>% add_annotations(x = relidfvol$mean[subsel],
+subsel = multigrep( c("nbm","snr","snc"), relidfvol$label)
+fig %>% add_annotations(x = relidfvol$mean[subsel],
                           y = relidfvol$icc[subsel],
                           text = relidfvol$label[subsel],
                           xref = "x",
@@ -270,7 +269,32 @@ plot_ly(relidfarea, x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',
         text = ~paste('Area: ', label))
 plot_ly(relidfarea[ relidfarea$mean<quantile(relidfarea$mean,0.2), ], x = ~mean, y = ~icc, type = 'scatter', mode = 'markers',  text = ~paste('Area: ', label))
 
+
+# quantile tables
+qdf = data.frame( msr='icc', t(quantile( relidfvol$icc ) ))
+qdf = rbind( qdf, data.frame(  msr='cv',  t(quantile( relidfvol$cv ) )))
+colnames(qdf)=c("RMSR","0%","25%","50%","75%","100%")
+pander::pander( qdf )
 ```
+
+
+##  Summary reliability data: cortical volumes
+
+```{r allrelctx,fig.width=14,fig.height=4,echo=FALSE,eval=TRUE,message=FALSE,warning=FALSE}
+
+relidfvolctx = relidfvol[ grep("dktcortex",relidfvol$label),]
+relidfvolctx$label = as.character( relidfvolctx$label )
+relidfvolctx$label = factor( relidfvolctx$label, levels=relidfvolctx$label)
+
+plot_ly(relidfvolctx, type='bar', x = ~label, y = ~cv, text = ~label, name="",
+               texttemplate = '%{y:.2s}', textposition = 'outside') %>% layout(uniformtext=list(minsize=8, mode='hide'))
+# quantile tables
+qdf = data.frame( msr='icc', t(quantile( relidfvolctx$icc ) ))
+qdf = rbind( qdf, data.frame(  msr='cv',  t(quantile( relidfvolctx$cv ) )))
+colnames(qdf)=c("RMSR","0%","25%","50%","75%","100%")
+pander::pander( qdf )
+```
+
 
 
 ## show volumes for one subject at different sites
@@ -300,7 +324,7 @@ ggplot(dflong, aes(fill=Scanner, y=Volume, x=Anat)) +
 ```
 
 
-## Summmary  reliability data: statistical measures of reproducibility
+## Summary  reliability data: statistical measures of reproducibility
 
 ```{r,fig.width=14,fig.height=4,echo=FALSE}
 # now site reliability
